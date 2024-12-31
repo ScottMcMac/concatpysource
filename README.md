@@ -1,7 +1,23 @@
 # concatpysource
-A(nother) Python script that concatinates your Python source files. This one recursively parses your main script and any dependencies to only include files actually required to run your program. This seems most useful for prompting web based LLMs.
+A(nother) Python script that concatinates your Python source files. concatpysource takes a path to a python script and recursively parses that script and any dependencies to only include files actually required to run your program. It is designed to support prompting web based LLMs.
 
 Right now it outputs the concatinated text to the clipboard using Anthropic's suggested [format](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/long-context-tips#example-multi-document-structure).
+
+## Usage
+
+Download the script, make sure you've installed pyperclip (e.g `pip install pyperclip`) and run it with the path to your main script as an argument.
+
+```
+python concatpysource.py /path/to/main.py
+```
+
+You can also specify your project root directory if the script you are parsing is not in your project root directory. E.g.
+
+```
+python concatpysource.py /path/to/project/root/functions/dosomething.py /path/to/project/root
+```
+
+
 
 ## License
 

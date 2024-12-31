@@ -1,6 +1,6 @@
 # A Python script that concatinates your Python source files and copies them to the
 # clipboard. It recursively parses your main script and any dependencies to 
-# only include files actually required to run your program. 
+# only include files actually required to run your code. 
 
 import os
 import re
@@ -144,13 +144,15 @@ def get_all_dependencies(file_path, project_root=None, visited=None):
     
     return all_dependencies
 
-def concatenate_files(file_paths):
+def concatenate_files(file_paths, project_root):
     """Concatenate the contents of the given files."""
     documents_elem = Element('documents')
     for index, file_path in enumerate(file_paths, start=1):
         document_elem = SubElement(documents_elem, 'document', index=str(index))
         source_elem = SubElement(document_elem, 'source')
-        source_elem.text = file_path
+        # Convert the file path to be relative to the project root
+        rel_path = os.path.relpath(file_path, project_root)
+        source_elem.text = rel_path
         document_content_elem = SubElement(document_elem, 'document_content')
         with open(file_path, 'r') as file:
             content = file.read()
@@ -168,8 +170,10 @@ def main(input_path, project_root=None):
         project_root = os.path.dirname(input_path)
     dependencies = get_all_dependencies(input_path, project_root)
     all_files = [input_path] + list(dependencies)
-    concatenated_content = concatenate_files(all_files)
-    pyperclip.copy(concatenated_content)
+    concatenated_content = concatenate_files(all_files, project_root)
+    # Wrap content in triple backticks
+    wrapped_content = f"```\n{concatenated_content}```"
+    pyperclip.copy(wrapped_content)
     print("Concatenated content copied to clipboard.")
 
 if __name__ == "__main__":
