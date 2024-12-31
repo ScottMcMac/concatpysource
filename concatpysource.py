@@ -27,8 +27,13 @@ def find_dependencies(file_path, project_root=None):
     with open(file_path, 'r') as file:
         content = file.read()
         
-        # Find all import statements
-        imports = re.findall(r'import\s+([\w.]+)(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*', content)
+        # Find all import statements and capture the full module path
+        import_matches = re.finditer(r'import\s+((?:[\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*)?)+)', content)
+        imports = []
+        for match in import_matches:
+            # Split multiple imports on the same line and clean up
+            imports.extend([imp.split()[0] for imp in match.group(1).split(',')])
+        
         # Handle both absolute and relative imports
         from_imports = re.findall(r'from\s+(\.{0,2}[\w.]*)\s+import', content)
         
@@ -37,9 +42,34 @@ def find_dependencies(file_path, project_root=None):
         
         # Process imports and from_imports
         all_imports = []
-        for imp in imports:
-            all_imports.extend(imp.split(','))
         
+        # Process direct imports first
+        for imp in imports:
+            imp = imp.strip()
+            module_path = imp.replace('.', os.sep)
+            
+            # For absolute imports
+            possible_paths = [
+                # Current directory
+                os.path.join(base_dir, module_path + '.py'),
+                os.path.join(base_dir, module_path, '__init__.py'),
+                # Project root directory
+                os.path.join(project_root, module_path + '.py'),
+                os.path.join(project_root, module_path, '__init__.py'),
+                # One directory up from current
+                os.path.join(base_dir, '..', module_path + '.py'),
+                os.path.join(base_dir, '..', module_path, '__init__.py'),
+                # Relative to project root with proper package structure
+                os.path.join(project_root, *module_path.split(os.sep) + ['.py']),
+                os.path.join(project_root, *module_path.split(os.sep), '__init__.py')
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    dependencies.add(os.path.normpath(path))
+                    break
+        
+        # Process from imports
         for imp in from_imports:
             imp = imp.strip()
             if imp.startswith('.'):
@@ -58,7 +88,13 @@ def find_dependencies(file_path, project_root=None):
                 all_imports.append(imp)
                 module_path = imp.replace('.', os.sep)
             
-            if isinstance(module_path, str) and not imp.startswith('.'):
+            if imp.startswith('.'):
+                # For relative imports where module_path is already resolved
+                possible_paths = [
+                    module_path + '.py',
+                    os.path.join(module_path, '__init__.py')
+                ]
+            else:
                 # For absolute imports
                 possible_paths = [
                     # Current directory
@@ -73,12 +109,6 @@ def find_dependencies(file_path, project_root=None):
                     # Relative to project root with proper package structure
                     os.path.join(project_root, *module_path.split(os.sep) + ['.py']),
                     os.path.join(project_root, *module_path.split(os.sep), '__init__.py')
-                ]
-            else:
-                # For relative imports where module_path is already resolved
-                possible_paths = [
-                    module_path + '.py',
-                    os.path.join(module_path, '__init__.py')
                 ]
             
             for path in possible_paths:
