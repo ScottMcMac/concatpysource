@@ -9,7 +9,9 @@ def prettify(elem):
     """Return a pretty-printed XML string for the Element."""
     rough_string = tostring(elem, 'utf-8')
     reparsed = minidom.parseString(rough_string)
-    return reparsed.toprettyxml(indent="\t")
+    pretty_xml = reparsed.toprettyxml(indent="\t")
+    # Fix document_content closing tag indentation
+    return re.sub(r'\t\t\t</document_content>', '\t\t</document_content>', pretty_xml)
 
 def find_dependencies(file_path):
     """Find all dependencies (.py and .yaml files) in the given file."""
@@ -50,7 +52,14 @@ def concatenate_files(file_paths):
         source_elem.text = file_path
         document_content_elem = SubElement(document_elem, 'document_content')
         with open(file_path, 'r') as file:
-            document_content_elem.text = file.read()
+            content = file.read()
+            lines = content.split('\n')
+            # Add three tabs to each line except the last one
+            indented_lines = ['\t\t\t' + line for line in lines[:-1]]
+            # Handle the last line specially to avoid extra newline
+            if lines:
+                indented_lines.append('\t\t\t' + lines[-1])
+            document_content_elem.text = '\n' + '\n'.join(indented_lines)
     return prettify(documents_elem)
 
 def main(input_path):
