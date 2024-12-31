@@ -29,7 +29,8 @@ def find_dependencies(file_path, project_root=None):
         
         # Find all import statements
         imports = re.findall(r'import\s+([\w.]+)(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*', content)
-        from_imports = re.findall(r'from\s+([\w.]+)\s+import', content)
+        # Handle both absolute and relative imports
+        from_imports = re.findall(r'from\s+(\.{0,2}[\w.]*)\s+import', content)
         
         # Find all YAML file references
         yaml_files = re.findall(r'[\'"](.+\.yaml)[\'"]', content)
@@ -38,28 +39,47 @@ def find_dependencies(file_path, project_root=None):
         all_imports = []
         for imp in imports:
             all_imports.extend(imp.split(','))
-        all_imports.extend(from_imports)
         
-        for imp in all_imports:
+        for imp in from_imports:
             imp = imp.strip()
-            # Convert dots to directory separators
-            module_path = imp.replace('.', os.sep)
+            if imp.startswith('.'):
+                # Handle relative imports
+                dots = len(re.match(r'\.+', imp).group())
+                module_parts = imp[dots:].split('.')
+                current_path = os.path.dirname(file_path)
+                # Go up directories based on number of dots
+                for _ in range(dots - 1):
+                    current_path = os.path.dirname(current_path)
+                if module_parts[0]:  # If there's a module path after the dots
+                    module_path = os.path.join(current_path, *module_parts)
+                else:
+                    module_path = current_path
+            else:
+                all_imports.append(imp)
+                module_path = imp.replace('.', os.sep)
             
-            # Try different possible file paths
-            possible_paths = [
-                # Current directory
-                os.path.join(base_dir, module_path + '.py'),
-                os.path.join(base_dir, module_path, '__init__.py'),
-                # Project root directory
-                os.path.join(project_root, module_path + '.py'),
-                os.path.join(project_root, module_path, '__init__.py'),
-                # One directory up from current
-                os.path.join(base_dir, '..', module_path + '.py'),
-                os.path.join(base_dir, '..', module_path, '__init__.py'),
-                # Relative to project root with proper package structure
-                os.path.join(project_root, *module_path.split(os.sep) + ['.py']),
-                os.path.join(project_root, *module_path.split(os.sep), '__init__.py')
-            ]
+            if isinstance(module_path, str) and not imp.startswith('.'):
+                # For absolute imports
+                possible_paths = [
+                    # Current directory
+                    os.path.join(base_dir, module_path + '.py'),
+                    os.path.join(base_dir, module_path, '__init__.py'),
+                    # Project root directory
+                    os.path.join(project_root, module_path + '.py'),
+                    os.path.join(project_root, module_path, '__init__.py'),
+                    # One directory up from current
+                    os.path.join(base_dir, '..', module_path + '.py'),
+                    os.path.join(base_dir, '..', module_path, '__init__.py'),
+                    # Relative to project root with proper package structure
+                    os.path.join(project_root, *module_path.split(os.sep) + ['.py']),
+                    os.path.join(project_root, *module_path.split(os.sep), '__init__.py')
+                ]
+            else:
+                # For relative imports where module_path is already resolved
+                possible_paths = [
+                    module_path + '.py',
+                    os.path.join(module_path, '__init__.py')
+                ]
             
             for path in possible_paths:
                 if os.path.exists(path):
