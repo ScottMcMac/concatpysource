@@ -3,6 +3,7 @@ import re
 import pyperclip
 from xml.etree.ElementTree import Element, SubElement, tostring, ElementTree
 from xml.dom import minidom
+import argparse
 
 def prettify(elem):
     """Return a pretty-printed XML string for the Element."""
@@ -60,8 +61,10 @@ def main(input_path):
     print("Concatenated content copied to clipboard.")
 
 if __name__ == "__main__":
-    input_path = input("Enter the path to the main Python script: ")
-    main(input_path)
+    parser = argparse.ArgumentParser(description="Concatenate Python and YAML files and their dependencies into an XML format.")
+    parser.add_argument('file_path', type=str, help='The path to the main Python script')
+    args = parser.parse_args()
+    main(args.file_path)
 
 
 # Copyright 2024 Scott Macdonell
