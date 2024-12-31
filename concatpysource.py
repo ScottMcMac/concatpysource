@@ -1,3 +1,7 @@
+# A Python script that concatinates your Python source files and copies them to the
+# clipboard. It recursively parses your main script and any dependencies to 
+# only include files actually required to run your program. 
+
 import os
 import re
 import pyperclip
@@ -13,34 +17,81 @@ def prettify(elem):
     # Fix document_content closing tag indentation
     return re.sub(r'\t\t\t</document_content>', '\t\t</document_content>', pretty_xml)
 
-def find_dependencies(file_path):
+def find_dependencies(file_path, project_root=None):
     """Find all dependencies (.py and .yaml files) in the given file."""
     dependencies = set()
+    base_dir = os.path.dirname(file_path)
+    if project_root is None:
+        project_root = base_dir
+    
     with open(file_path, 'r') as file:
         content = file.read()
+        
         # Find all import statements
-        imports = re.findall(r'import (\S+)', content)
-        from_imports = re.findall(r'from (\S+) import', content)
+        imports = re.findall(r'import\s+([\w.]+)(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*', content)
+        from_imports = re.findall(r'from\s+([\w.]+)\s+import', content)
+        
         # Find all YAML file references
         yaml_files = re.findall(r'[\'"](.+\.yaml)[\'"]', content)
-        dependencies.update(imports)
-        dependencies.update(from_imports)
-        dependencies.update(yaml_files)
+        
+        # Process imports and from_imports
+        all_imports = []
+        for imp in imports:
+            all_imports.extend(imp.split(','))
+        all_imports.extend(from_imports)
+        
+        for imp in all_imports:
+            imp = imp.strip()
+            # Convert dots to directory separators
+            module_path = imp.replace('.', os.sep)
+            
+            # Try different possible file paths
+            possible_paths = [
+                # Current directory
+                os.path.join(base_dir, module_path + '.py'),
+                os.path.join(base_dir, module_path, '__init__.py'),
+                # Project root directory
+                os.path.join(project_root, module_path + '.py'),
+                os.path.join(project_root, module_path, '__init__.py'),
+                # One directory up from current
+                os.path.join(base_dir, '..', module_path + '.py'),
+                os.path.join(base_dir, '..', module_path, '__init__.py'),
+                # Relative to project root with proper package structure
+                os.path.join(project_root, *module_path.split(os.sep) + ['.py']),
+                os.path.join(project_root, *module_path.split(os.sep), '__init__.py')
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    dependencies.add(os.path.normpath(path))
+                    break
+        
+        # Process YAML files
+        for yaml_file in yaml_files:
+            yaml_path = os.path.join(base_dir, yaml_file)
+            if os.path.exists(yaml_path):
+                dependencies.add(os.path.normpath(yaml_path))
+    
     return dependencies
 
-def get_all_dependencies(file_path, visited=None):
+def get_all_dependencies(file_path, project_root=None, visited=None):
     """Recursively find all dependencies for the given file."""
     if visited is None:
         visited = set()
-    visited.add(file_path)
-    dependencies = find_dependencies(file_path)
+    
+    norm_file_path = os.path.normpath(file_path)
+    if norm_file_path in visited:
+        return set()
+        
+    visited.add(norm_file_path)
+    dependencies = find_dependencies(norm_file_path, project_root)
     all_dependencies = set()
-    for dep in dependencies:
-        if dep.endswith('.py') or dep.endswith('.yaml'):
-            dep_path = os.path.join(os.path.dirname(file_path), dep)
-            if os.path.exists(dep_path) and dep_path not in visited:
-                all_dependencies.add(dep_path)
-                all_dependencies.update(get_all_dependencies(dep_path, visited))
+    
+    for dep_path in dependencies:
+        if dep_path not in visited:
+            all_dependencies.add(dep_path)
+            all_dependencies.update(get_all_dependencies(dep_path, project_root, visited))
+    
     return all_dependencies
 
 def concatenate_files(file_paths):
@@ -62,8 +113,10 @@ def concatenate_files(file_paths):
             document_content_elem.text = '\n' + '\n'.join(indented_lines)
     return prettify(documents_elem)
 
-def main(input_path):
-    dependencies = get_all_dependencies(input_path)
+def main(input_path, project_root=None):
+    if project_root is None:
+        project_root = os.path.dirname(input_path)
+    dependencies = get_all_dependencies(input_path, project_root)
     all_files = [input_path] + list(dependencies)
     concatenated_content = concatenate_files(all_files)
     pyperclip.copy(concatenated_content)
@@ -72,8 +125,9 @@ def main(input_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Concatenate Python and YAML files and their dependencies into an XML format.")
     parser.add_argument('file_path', type=str, help='The path to the main Python script')
+    parser.add_argument('--project-root', type=str, help='The root directory of the project (defaults to the directory containing file_path)')
     args = parser.parse_args()
-    main(args.file_path)
+    main(args.file_path, args.project_root)
 
 
 # Copyright 2024 Scott Macdonell
